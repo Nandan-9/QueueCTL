@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	"queuectl/internal/queue"
 	"queuectl/internal/storage"
 	"queuectl/internal/job"
+	"queuectl/internal/worker"
+
 
 )
 
@@ -83,61 +83,7 @@ func enqueueCmd(q *queue.Queue, args []string) {
 // simple worker loop that executes commands using a fake handler.
 // Replace runJobHandler with real business logic.
 func workerCmd(q *queue.Queue) {
-	fmt.Println("worker starting... press ctrl+c to stop")
-
-	// handle graceful shutdown
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-loop:
-	for {
-		select {
-		case <-stop:
-			fmt.Println("shutting down worker")
-			break loop
-		default:
-			j, err := q.Pull()
-			if err != nil {
-				log.Printf("pull error: %v", err)
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			if j == nil {
-				time.Sleep(300 * time.Millisecond)
-				continue
-			}
-
-			// Execute job handler (demo)
-			err = runJobHandler(j.Command)
-			if err != nil {
-				log.Printf("job %d failed: %v", j.ID, err)
-				if err2 := q.Reject(j, err.Error()); err2 != nil {
-					log.Printf("reject error: %v", err2)
-				}
-			} else {
-				if err2 := q.Ack(j); err2 != nil {
-					log.Printf("ack error: %v", err2)
-				} else {
-					log.Printf("job %d completed", j.ID)
-				}
-			}
-		}
-	}
-}
-
-func runJobHandler(cmd string) error {
-	// SPECIAL NOTE:
-	// Replace this with real business logic.
-	// For demonstration return error if command contains "fail"
-	if cmd == "sleep" {
-		time.Sleep(1 * time.Second)
-		return nil
-	}
-	if cmd == "fail" {
-		return fmt.Errorf("simulated failure")
-	}
-	// else succeed
-	return nil
+    worker.Start(q)
 }
 
 func jobsCmd(db *sql.DB) {

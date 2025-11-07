@@ -29,7 +29,7 @@ type Job struct {
 
 // NewJob creates a new pending job with timestamps
 func NewJob(command string, maxRetries int) *Job {
-    now := time.Now()
+    now := time.Now().UTC()
     return &Job{
         Command:    command,
         State:      Pending,
