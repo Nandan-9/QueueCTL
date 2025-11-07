@@ -17,19 +17,19 @@ import (
 
 
 
-func Start(q*queue.Queue){
+func Start(q*queue.Queue, concurrency int){
 
 	fmt.Println("Staring worker.........Press Ctrl + C to stop")
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-loop:
-	for {
+	for i := 0; i < concurrency; i++ {
+		go func (workerID int)  {
+			for {
 		select {
 		case <- stop:
-			fmt.Println("shutting down worker....")
-			break loop
+			return
 
 		default:
 
@@ -61,6 +61,12 @@ loop:
 			}
 		}
 	}
+			
+		}(i + 1)
+	}
+	    <-stop
+    fmt.Println("Shutting down all workers")
+	
 }
 
 

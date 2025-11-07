@@ -7,14 +7,13 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"queuectl/internal/job"
 	"queuectl/internal/queue"
 	"queuectl/internal/storage"
-	"queuectl/internal/job"
 	"queuectl/internal/worker"
-
-
 )
 
 const dbPath = "queue.db"
@@ -39,7 +38,7 @@ func main() {
 	case "enqueue":
 		enqueueCmd(q, os.Args[2:])
 	case "worker":
-		workerCmd(q)
+		workerCmd(q, os.Args[2:])
 	case "jobs":
 		jobsCmd(db)
 	case "dlq":
@@ -72,7 +71,7 @@ func enqueueCmd(q *queue.Queue, args []string) {
 		fmt.Println("enqueue requires a command string")
 		return
 	}
-	cmd := rest[0]
+	cmd := strings.Join(rest, " ")
 	j, err := q.Push(cmd, *retries)
 	if err != nil {
 		log.Fatalf("push: %v", err)
@@ -82,9 +81,14 @@ func enqueueCmd(q *queue.Queue, args []string) {
 
 // simple worker loop that executes commands using a fake handler.
 // Replace runJobHandler with real business logic.
-func workerCmd(q *queue.Queue) {
-    worker.Start(q)
+func workerCmd(q *queue.Queue, args []string) {
+    flags := flag.NewFlagSet("worker", flag.ExitOnError)
+    concurrency := flags.Int("concurrency", 1, "number of worker goroutines")
+    _ = flags.Parse(args)
+
+    worker.Start(q, *concurrency)
 }
+
 
 func jobsCmd(db *sql.DB) {
 	activeStates := []string{"pending", "running", "failed", "completed"}
@@ -119,15 +123,23 @@ func dlqCmd(db *sql.DB) {
 }
 
 func retryCmd(db *sql.DB, args []string) {
-	if len(args) < 1 {
-		fmt.Println("retry <dead_job_id>")
-		return
-	}
-	id64, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil {
-		fmt.Println("invalid id")
-		return
-	}
-	// Placeholder: implement moving dead_jobs back to jobs if desired.
-	fmt.Printf("retry not implemented for id=%d\n", id64)
+    if len(args) < 1 {
+        fmt.Println("retry <dead_job_id>")
+        return
+    }
+
+    id64, err := strconv.ParseInt(args[0], 10, 64)
+    if err != nil {
+        fmt.Println("invalid id")
+        return
+    }
+
+    q := queue.NewQueue(db)
+    j, err := q.Retry(id64)
+    if err != nil {
+        fmt.Printf("retry failed: %v\n", err)
+        return
+    }
+
+    fmt.Printf("job re-enqueued: id=%d cmd=%s\n", j.ID, j.Command)
 }

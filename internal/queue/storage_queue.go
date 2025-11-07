@@ -85,3 +85,7 @@ func (q *Queue) Reject(j *job.Job, lastError string) error {
 
 	return storage.UpdateJob(q.db, j)
 }
+
+func (q *Queue) Retry(deadJobID int64) (*job.Job, error) {
+    return storage.RetryDeadJob(q.db, deadJobID)
+}
