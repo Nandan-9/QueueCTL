@@ -9,6 +9,7 @@ import (
 )
 
 // Queue abstracts high-level queue behaviors on top of storage.
+// Queue provides high-level operations over storage.
 type Queue struct {
 	db *sql.DB
 }
@@ -18,14 +19,9 @@ func NewQueue(db *sql.DB) *Queue {
 	return &Queue{db: db}
 }
 
-func (q *Queue) Db() *sql.DB {
-    return q.db
-}
-
 // Push inserts a new pending job.
 func (q *Queue) Push(command string, maxRetries int) (*job.Job, error) {
 	j := job.NewJob(command, maxRetries)
-
 	id, err := storage.InsertJob(q.db, j)
 	if err != nil {
 		return nil, err
@@ -38,8 +34,7 @@ func (q *Queue) Push(command string, maxRetries int) (*job.Job, error) {
 func (q *Queue) Pull() (*job.Job, error) {
 	j, err := storage.PullPendingJob(q.db)
 	if err != nil {
-		// no pending job case
-		if err == sql.ErrNoRows {
+		if err == storage.ErrNoJob {
 			return nil, nil
 		}
 		return nil, err
@@ -47,28 +42,46 @@ func (q *Queue) Pull() (*job.Job, error) {
 	return j, nil
 }
 
-// Ack finalizes a job as completed.
+// Ack marks job completed and deletes it from active jobs.
 func (q *Queue) Ack(j *job.Job) error {
 	if err := j.UpdateState(job.Completed); err != nil {
 		return err
 	}
-	return storage.UpdateJob(q.db, j)
+	// update then delete for record-keeping; or just delete directly.
+	j.UpdatedAt = time.Now().UTC()
+	if err := storage.UpdateJob(q.db, j); err != nil {
+		return err
+	}
+	return storage.DeleteJob(q.db, j.ID)
 }
 
-// Reject handles retry or marks dead.
-func (q *Queue) Reject(j *job.Job) error {
+// Reject handles retry or moves job to DLQ when retries exhausted.
+func (q *Queue) Reject(j *job.Job, lastError string) error {
 	j.Attempts++
+	j.LastError = lastError
 
+	// If exceeded retries => Move to DLQ
 	if j.Attempts > j.MaxRetries {
 		if err := j.UpdateState(job.Dead); err != nil {
 			return err
 		}
-	} else {
-		if err := j.UpdateState(job.Failed); err != nil {
+		j.UpdatedAt = time.Now().UTC()
+		// move to dead table & delete active
+		if err := storage.MoveToDead(q.db, j); err != nil {
 			return err
 		}
+		return nil
 	}
 
-	j.UpdatedAt = time.Now()
+	// else schedule retry with exponential backoff: 1s,2s,4s,8s...
+	// backoff = 2^(attempts-1) seconds
+	backoffSeconds := 1 << uint(j.Attempts-1)
+	j.ScheduledAt = time.Now().UTC().Add(time.Duration(backoffSeconds) * time.Second)
+
+	if err := j.UpdateState(job.Failed); err != nil {
+		return err
+	}
+	j.UpdatedAt = time.Now().UTC()
+
 	return storage.UpdateJob(q.db, j)
 }
