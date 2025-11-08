@@ -46,6 +46,15 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('max_retries', '3');
 INSERT OR IGNORE INTO config (key, value) VALUES ('backoff_base', '2');
 INSERT OR IGNORE INTO config (key, value) VALUES ('log_level', 'info');
 INSERT OR IGNORE INTO config (key, value) VALUES ('worker_concurrency', '1');
+
+CREATE TABLE IF NOT EXISTS workers (
+    id INTEGER PRIMARY KEY,
+    state TEXT NOT NULL,
+    current_job_id INTEGER,
+    updated_at DATETIME NOT NULL
+);
+
+
 `
 
 var ErrNoJob = errors.New("no pending job")

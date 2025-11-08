@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -34,10 +35,8 @@ func ClearStopSignal() {
 
 
 
-func Start(q *queue.Queue, concurrency int) {
+func Start(db *sql.DB, q *queue.Queue, concurrency int) {
     fmt.Println("Starting worker.........Press Ctrl + C to stop")
-
-    // cleanup stop file immediately
     ClearStopSignal()
 
     stop := make(chan os.Signal, 1)
@@ -45,38 +44,45 @@ func Start(q *queue.Queue, concurrency int) {
 
     for i := 0; i < concurrency; i++ {
         workerID := i + 1
-        updateWorkerStatus(workerID, "idle", 0)
+        _ = UpdateWorkerStatus(db, workerID, "idle", 0)
 
         go func(id int) {
             for {
-                // check file after cleanup
                 if shouldStop() {
                     fmt.Printf("Worker %d stopping...\n", id)
+                    _ = UpdateWorkerStatus(db, id, "stopped", 0)
                     return
                 }
 
-                job, err := q.Pull()
-                if err != nil {
-                    time.Sleep(500 * time.Millisecond)
-                    continue
-                }
-                if job == nil {
-                    time.Sleep(300 * time.Millisecond)
-                    continue
-                }
+                select {
+                case <-stop:
+                    fmt.Printf("Worker %d received interrupt\n", id)
+                    _ = UpdateWorkerStatus(db, id, "stopped", 0)
+                    return
+                default:
+                    job, err := q.Pull()
+                    if err != nil {
+                        time.Sleep(500 * time.Millisecond)
+                        continue
+                    }
+                    if job == nil {
+                        time.Sleep(300 * time.Millisecond)
+                        continue
+                    }
 
-                updateWorkerStatus(id, "running", job.ID)
+                    _ = UpdateWorkerStatus(db, id, "running", job.ID)
 
-                err = runJob(job.Command)
-                if err != nil {
-                    log.Printf("job %d failed: %v", job.ID, err)
-                    _ = q.Reject(job, err.Error())
-                } else {
-                    log.Printf("job %d completed", job.ID)
-                    _ = q.Ack(job)
+                    err = runJob(job.Command)
+                    if err != nil {
+                        log.Printf("job %d failed: %v", job.ID, err)
+                        _ = q.Reject(job, err.Error())
+                    } else {
+                        log.Printf("job %d completed", job.ID)
+                        _ = q.Ack(job)
+                    }
+
+                    _ = UpdateWorkerStatus(db, id, "idle", 0)
                 }
-
-                updateWorkerStatus(id, "idle", 0)
             }
         }(workerID)
     }
@@ -84,6 +90,7 @@ func Start(q *queue.Queue, concurrency int) {
     <-stop
     fmt.Println("Shutting down all workers")
     _ = SignalStop()
+    time.Sleep(1 * time.Second)
 }
 
 

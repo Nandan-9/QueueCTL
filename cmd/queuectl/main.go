@@ -38,7 +38,7 @@ func main() {
 	case "enqueue":
 		enqueueCmd(q, os.Args[2:])
 	case "worker":
-		workerCmd(q, os.Args[2:])
+		workerCmd(db,q, os.Args[2:])
 	case "jobs":
 		jobsCmd(db)
 	case "dlq":
@@ -90,7 +90,7 @@ func enqueueCmd(q *queue.Queue, args []string) {
 
 // simple worker loop that executes commands using a fake handler.
 // Replace runJobHandler with real business logic.
-func workerCmd(q *queue.Queue, args []string) {
+func workerCmd(db *sql.DB,q *queue.Queue, args []string) {
 	if len(args) == 0 {
 		fmt.Println("Usage: queuectl worker start|stop [--concurrency N]")
 		return
@@ -102,7 +102,7 @@ func workerCmd(q *queue.Queue, args []string) {
 		concurrency := flags.Int("concurrency", 1, "number of worker goroutines")
 		_ = flags.Parse(args[1:])
 
-		worker.Start(q, *concurrency)
+		worker.Start(db,q, *concurrency)
 
 	case "stop":
 		fmt.Println("Sending stop signal to workers...")
@@ -249,7 +249,6 @@ func configCmd(db *sql.DB, args []string) {
 }
 
 func statusCmd(db *sql.DB, q *queue.Queue) {
-    // Job counts by state
     counts := map[job.JobState]int{}
     states := []job.JobState{job.Pending, job.Running, job.Failed, job.Completed, job.Dead}
 
@@ -261,7 +260,6 @@ func statusCmd(db *sql.DB, q *queue.Queue) {
         counts[s] = n
     }
 
-    // Next scheduled pending job
     next, err := storage.GetNextScheduledJob(db)
     if err != nil && err != sql.ErrNoRows {
         log.Fatalf("fetch next job: %v", err)
@@ -275,7 +273,6 @@ func statusCmd(db *sql.DB, q *queue.Queue) {
     fmt.Printf("Failed: %d\n", counts[job.Failed])
     fmt.Printf("Completed: %d\n", counts[job.Completed])
     fmt.Printf("Dead (DLQ): %d\n", counts[job.Dead])
-
     if next != nil {
         fmt.Printf("Next Scheduled Job: ID=%d at %s\n", next.ID, next.ScheduledAt.Format(time.RFC3339))
     } else {
@@ -287,13 +284,13 @@ func statusCmd(db *sql.DB, q *queue.Queue) {
         fmt.Printf("%s = %s\n", k, v)
     }
 
-    // worker status — from global worker registry (added below)
-    workers := worker.GetWorkerStatus()
     fmt.Println("\n=== Workers ===")
+    workers, _ := worker.GetAllWorkerStatus(db)
     for _, w := range workers {
-        fmt.Printf("worker-%d: state=%s job_id=%d\n", w.ID, w.State, w.CurrentJobID)
+        fmt.Printf("worker-%d: state=%s job_id=%d updated=%s\n", w.ID, w.State, w.CurrentJobID, w.UpdatedAt.Format(time.RFC3339))
     }
 }
+
 
 
 func listJobsCmd(db *sql.DB, args []string) {
