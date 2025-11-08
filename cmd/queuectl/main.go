@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,7 +42,8 @@ func main() {
 	case "jobs":
 		jobsCmd(db)
 	case "dlq":
-		dlqCmd(db)
+		dlqCmd(db, os.Args[2:])
+
 	case "flush":
 	flushCmd(q, os.Args[2:])
 	case "config":
@@ -133,20 +135,52 @@ func jobsCmd(db *sql.DB) {
 	}
 }
 
-func dlqCmd(db *sql.DB) {
-	ds, err := storage.ListDeadJobs(db)
-	if err != nil {
-		log.Fatalf("list dead jobs: %v", err)
-	}
-	if len(ds) == 0 {
-		fmt.Println("no dead jobs")
+func dlqCmd(db *sql.DB, args []string) {
+	if len(args) == 0 {
+		fmt.Println("usage: queuectl dlq [list|retry <id>]")
 		return
 	}
-	fmt.Println("=== dead jobs ===")
-	for _, d := range ds {
-		fmt.Printf("id=%d orig_id=%v cmd=%s attempts=%d failed_at=%s last_error=%v\n", d.ID, d.OrigID, d.Command, d.Attempts, d.FailedAt.Format(time.RFC3339), d.LastError)
+
+	switch args[0] {
+	case "list":
+		ds, err := storage.ListDeadJobs(db)
+		if err != nil {
+			log.Fatalf("list dead jobs: %v", err)
+		}
+		if len(ds) == 0 {
+			fmt.Println("no dead jobs")
+			return
+		}
+		fmt.Println("=== dead jobs ===")
+		for _, d := range ds {
+			fmt.Printf("id=%d orig=%v cmd=%s attempts=%d failed_at=%s\n",
+				d.ID, d.OrigID, d.Command, d.Attempts, d.FailedAt.Format(time.RFC3339))
+		}
+
+	case "retry":
+		if len(args) < 2 {
+			fmt.Println("usage: queuectl dlq retry <dead_job_id>")
+			return
+		}
+
+		id, err := strconv.Atoi(args[1])
+		if err != nil {
+			fmt.Println("invalid job id:", args[1])
+			return
+		}
+
+		if err := storage.RetryDeadJob(db, id); err != nil {
+			fmt.Printf("retry failed: %v\n", err)
+			return
+		}
+
+		fmt.Printf("retried dead job %d\n", id)
+
+	default:
+		fmt.Println("usage: queuectl dlq [list|retry <id>]")
 	}
 }
+
 
 
 

@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -233,6 +234,37 @@ func ListDeadJobs(db *sql.DB) ([]DeadJob, error) {
 	}
 	return out, nil
 }
+
+
+func RetryDeadJob(db *sql.DB, deadJobID int) error {
+	// Fetch dead job
+	row := db.QueryRow(`SELECT orig_id, command, max_retries FROM dead_jobs WHERE id = ?`, deadJobID)
+
+	var origID sql.NullInt64
+	var cmd string
+	var maxRetries int
+
+	if err := row.Scan(&origID, &cmd, &maxRetries); err != nil {
+		return fmt.Errorf("dead job id %d not found: %w", deadJobID, err)
+	}
+
+	// If orig_id not stored, assign new ID (auto)
+	insert := `
+	INSERT INTO jobs (command, state, attempts, max_retries, scheduled_at, created_at, updated_at)
+	VALUES (?, 'pending', 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`
+	_, err := db.Exec(insert, cmd, maxRetries)
+	if err != nil {
+		return fmt.Errorf("requeue failed: %w", err)
+	}
+
+	// Remove from dead queue
+	_, _ = db.Exec(`DELETE FROM dead_jobs WHERE id = ?`, deadJobID)
+
+	return nil
+}
+
+
 
 func FlushPending(db *sql.DB) error {
 	_, err := db.Exec(`DELETE FROM jobs WHERE state = ?`, "pending")

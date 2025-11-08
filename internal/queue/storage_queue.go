@@ -50,13 +50,10 @@ func (q *Queue) Ack(j *job.Job) error {
 	if err := j.UpdateState(job.Completed); err != nil {
 		return err
 	}
-	// update then delete for record-keeping; or just delete directly.
 	j.UpdatedAt = time.Now().UTC()
-	if err := storage.UpdateJob(q.db, j); err != nil {
-		return err
-	}
-	return storage.DeleteJob(q.db, j.ID)
+	return storage.UpdateJob(q.db, j)  // just update, don't delete
 }
+
 
 // Reject handles retry or moves job to DLQ when retries exhausted.
 func (q *Queue) Reject(j *job.Job, lastError string) error {

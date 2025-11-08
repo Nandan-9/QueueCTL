@@ -9,10 +9,14 @@ import (
 
 
 func CountJobsByState(db *sql.DB, state job.JobState) (int, error) {
-    row := db.QueryRow("SELECT COUNT(*) FROM jobs WHERE state = ?", state)
     var count int
-    return count, row.Scan(&count)
+    row := db.QueryRow("SELECT COUNT(*) FROM jobs WHERE state = ?", string(state))
+    if err := row.Scan(&count); err != nil {
+        return 0, err
+    }
+    return count, nil
 }
+
 
 func GetNextScheduledJob(db *sql.DB) (*job.Job, error) {
     row := db.QueryRow(`
