@@ -51,8 +51,8 @@ func Start(q*queue.Queue, concurrency int){
 			if err != nil {
 				log.Printf("job %d failed: %v", job.ID, err)
 
-			if rErr := q.Reject(job, err.Error()); rErr != nil {
-				log.Printf("error rejecting job %d: %v", job.ID, rErr)
+			if err := q.Reject(job, err.Error()); err != nil {
+				log.Printf("error rejecting job %d: %v", job.ID,err)
 			}			
 			
 			} else {

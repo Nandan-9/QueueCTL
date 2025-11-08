@@ -2,6 +2,7 @@ package queue
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"queuectl/internal/job"
@@ -86,6 +87,30 @@ func (q *Queue) Reject(j *job.Job, lastError string) error {
 	return storage.UpdateJob(q.db, j)
 }
 
-func (q *Queue) Retry(deadJobID int64) (*job.Job, error) {
-    return storage.RetryDeadJob(q.db, deadJobID)
+func (q *Queue) Retry(jobID int64) (*job.Job, error) {
+	j, err := storage.GetJobByID(q.db, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("job %d not found: %w", jobID, err)
+	}
+
+	// allow retry only failed/dead jobs
+	if j.State != job.Failed  {
+		return nil, fmt.Errorf("job %d is not retryable (state=%s)", jobID, j.State)
+	}
+
+	// reset state & schedule immediately
+	j.State = job.Pending
+	j.ScheduledAt = time.Now().UTC()
+
+
+	if err := storage.UpdateJob(q.db, j); err != nil {
+		return nil, err
+	}
+
+	return j, nil
 }
+
+
+
+
+

@@ -44,7 +44,7 @@ func main() {
 	case "dlq":
 		dlqCmd(db)
 	case "retry":
-		retryCmd(db, os.Args[2:])
+		retryCmd(q, os.Args[2:])
 	default:
 		usage()
 	}
@@ -122,24 +122,23 @@ func dlqCmd(db *sql.DB) {
 	}
 }
 
-func retryCmd(db *sql.DB, args []string) {
-    if len(args) < 1 {
-        fmt.Println("retry <dead_job_id>")
-        return
-    }
+func retryCmd(q *queue.Queue, args []string) {
+	if len(args) < 1 {
+		fmt.Println("retry <id>")
+		return
+	}
 
-    id64, err := strconv.ParseInt(args[0], 10, 64)
-    if err != nil {
-        fmt.Println("invalid id")
-        return
-    }
+	id64, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		fmt.Println("invalid id")
+		return
+	}
 
-    q := queue.NewQueue(db)
-    j, err := q.Retry(id64)
-    if err != nil {
-        fmt.Printf("retry failed: %v\n", err)
-        return
-    }
+	j, err := q.Retry(id64)
+	if err != nil {
+		fmt.Printf("retry failed: %v\n", err)
+		return
+	}
 
-    fmt.Printf("job re-enqueued: id=%d cmd=%s\n", j.ID, j.Command)
+	fmt.Printf("job re-enqueued: id=%d cmd=%s\n", j.ID, j.Command)
 }
