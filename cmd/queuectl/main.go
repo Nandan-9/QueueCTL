@@ -62,13 +62,21 @@ func main() {
 func usage() {
 	fmt.Println(`queuectl <cmd> [args]
 commands:
-  enqueue <command> [--retries N]   enqueue a job
-  worker                            run a single worker (blocks)
-  jobs                              list active jobs
-  dlq                               list dead jobs
-  retry <dead_job_id>               (not implemented) placeholder
+  enqueue <command> [--retries N]      Enqueue a job with optional max retries
+  worker start [--concurrency N]      Start worker(s) to process jobs
+  worker stop                          Stop all running workers gracefully
+  jobs                                 List active jobs by state (pending, running, failed, completed)
+  dlq list                             List dead jobs (jobs exceeding max retries)
+  dlq retry <dead_job_id>              Retry a job from the dead-letter queue
+  flush [pending|dead|all]             Remove jobs from the queue or DLQ
+  config                               Show all configuration values
+  config get <key>                     Get a specific configuration value
+  config set <key> <value>             Set a configuration value
+  status                               Show queue status and worker states
+  list [--state <state>]               List jobs filtered by state (pending, running, failed, completed)
 `)
 }
+
 
 func enqueueCmd(q *queue.Queue, args []string) {
 	flags := flag.NewFlagSet("enqueue", flag.ExitOnError)
