@@ -1,7 +1,7 @@
 package job
 
 import (
-    "time"
+	"time"
 )
 
 type JobState string
@@ -65,12 +65,11 @@ func (e *ErrInvalidTransition) Error() string {
 func isValidTransition(from, to JobState) bool {
     allowed := map[JobState][]JobState{
         Pending:   {Running, Dead},
-        Running:   {Completed, Failed},
-        Failed:    {Pending, Dead},
+        Running:   {Completed, Failed, Dead}, // ✅ add Dead here
+        Failed:    {Pending, Dead, Failed},   // ✅ allow retry cycles
         Completed: {},
         Dead:      {},
     }
-
     for _, s := range allowed[from] {
         if s == to {
             return true

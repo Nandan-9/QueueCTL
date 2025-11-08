@@ -13,61 +13,79 @@ import (
 
 
 
+const stopFile = ".queuectl_workers.stop"
 
-
-
-
-func Start(q*queue.Queue, concurrency int){
-
-	fmt.Println("Staring worker.........Press Ctrl + C to stop")
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	for i := 0; i < concurrency; i++ {
-		go func (workerID int)  {
-			for {
-		select {
-		case <- stop:
-			return
-
-		default:
-
-			job, err := q.Pull()
-
-			if err != nil {
-				log.Printf("pull error:%v",err)
-				time.Sleep(500* time.Millisecond)
-				continue
-			}
-
-			if job == nil {
-				time.Sleep(300 * time.Millisecond)
-				continue
-			}
-
-			err = runJob(job.Command)
-
-			if err != nil {
-				log.Printf("job %d failed: %v", job.ID, err)
-
-			if err := q.Reject(job, err.Error()); err != nil {
-				log.Printf("error rejecting job %d: %v", job.ID,err)
-			}			
-			
-			} else {
-				log.Printf("job %d completed", job.ID)
-				_ = q.Ack(job)
-			}
-		}
-	}
-			
-		}(i + 1)
-	}
-	    <-stop
-    fmt.Println("Shutting down all workers")
-	
+// check if stop file exists
+func shouldStop() bool {
+	_, err := os.Stat(stopFile)
+	return err == nil
 }
+
+// create stop file
+func SignalStop() error {
+	return os.WriteFile(stopFile, []byte("stop"), 0644)
+}
+
+// remove stop file (cleanup)
+func ClearStopSignal() {
+	_ = os.Remove(stopFile)
+}
+
+
+
+
+func Start(q *queue.Queue, concurrency int) {
+    fmt.Println("Starting worker.........Press Ctrl + C to stop")
+
+    // cleanup stop file immediately
+    ClearStopSignal()
+
+    stop := make(chan os.Signal, 1)
+    signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+    for i := 0; i < concurrency; i++ {
+        workerID := i + 1
+        updateWorkerStatus(workerID, "idle", 0)
+
+        go func(id int) {
+            for {
+                // check file after cleanup
+                if shouldStop() {
+                    fmt.Printf("Worker %d stopping...\n", id)
+                    return
+                }
+
+                job, err := q.Pull()
+                if err != nil {
+                    time.Sleep(500 * time.Millisecond)
+                    continue
+                }
+                if job == nil {
+                    time.Sleep(300 * time.Millisecond)
+                    continue
+                }
+
+                updateWorkerStatus(id, "running", job.ID)
+
+                err = runJob(job.Command)
+                if err != nil {
+                    log.Printf("job %d failed: %v", job.ID, err)
+                    _ = q.Reject(job, err.Error())
+                } else {
+                    log.Printf("job %d completed", job.ID)
+                    _ = q.Ack(job)
+                }
+
+                updateWorkerStatus(id, "idle", 0)
+            }
+        }(workerID)
+    }
+
+    <-stop
+    fmt.Println("Shutting down all workers")
+    _ = SignalStop()
+}
+
 
 
 

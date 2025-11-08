@@ -3,6 +3,8 @@ package queue
 import (
 	"database/sql"
 	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"queuectl/internal/job"
@@ -58,59 +60,82 @@ func (q *Queue) Ack(j *job.Job) error {
 
 // Reject handles retry or moves job to DLQ when retries exhausted.
 func (q *Queue) Reject(j *job.Job, lastError string) error {
-	j.Attempts++
-	j.LastError = lastError
+    j.Attempts++
+    j.LastError = lastError
 
-	// If exceeded retries => Move to DLQ
-	if j.Attempts > j.MaxRetries {
-		if err := j.UpdateState(job.Dead); err != nil {
-			return err
-		}
-		j.UpdatedAt = time.Now().UTC()
-		// move to dead table & delete active
-		if err := storage.MoveToDead(q.db, j); err != nil {
-			return err
-		}
-		return nil
-	}
+    // -------------------------
+    // Load runtime config
+    // -------------------------
 
-	// else schedule retry with exponential backoff: 1s,2s,4s,8s...
-	// backoff = 2^(attempts-1) seconds
-	backoffSeconds := 1 << uint(j.Attempts-1)
-	j.ScheduledAt = time.Now().UTC().Add(time.Duration(backoffSeconds) * time.Second)
+    maxRetriesStr, err := storage.ConfigGet(q.db, "max_retries")
+    maxRetries := j.MaxRetries // fallback = job value
 
-	if err := j.UpdateState(job.Failed); err != nil {
-		return err
-	}
-	j.UpdatedAt = time.Now().UTC()
+    if err == nil {
+        if v, convErr := strconv.Atoi(maxRetriesStr); convErr == nil {
+            maxRetries = v
+        }
+    }
 
-	return storage.UpdateJob(q.db, j)
+    backoffBaseStr, err := storage.ConfigGet(q.db, "backoff_base")
+    backoffBase := 2 // default exponential base=2
+
+    if err == nil {
+        if v, convErr := strconv.Atoi(backoffBaseStr); convErr == nil {
+            backoffBase = v
+        }
+    }
+
+    // -------------------------
+    // DLQ Check
+    // -------------------------
+
+    if j.Attempts > maxRetries {
+        // ensure legal transition: Running → Failed → Dead
+        if j.State == job.Running {
+            _ = j.UpdateState(job.Failed)
+        }
+
+        if err := j.UpdateState(job.Dead); err != nil {
+            return err
+        }
+
+        j.UpdatedAt = time.Now().UTC()
+        return storage.MoveToDead(q.db, j)
+    }
+
+    // -------------------------
+    // Retry Backoff Logic
+    // -------------------------
+
+    // default exponential backoff logic with config base
+    // delay = base^(attempts-1)
+    delay := math.Pow(float64(backoffBase), float64(j.Attempts-1))
+    j.ScheduledAt = time.Now().UTC().Add(time.Duration(delay) * time.Second)
+
+    if err := j.UpdateState(job.Failed); err != nil {
+        return err
+    }
+
+    j.UpdatedAt = time.Now().UTC()
+    return storage.UpdateJob(q.db, j)
 }
 
-func (q *Queue) Retry(jobID int64) (*job.Job, error) {
-	j, err := storage.GetJobByID(q.db, jobID)
-	if err != nil {
-		return nil, fmt.Errorf("job %d not found: %w", jobID, err)
+
+
+
+
+
+
+
+func (q *Queue) Flush(kind string) error {
+	switch kind {
+	case "pending":
+		return storage.FlushPending(q.db)
+	case "dead":
+		return storage.FlushDead(q.db)
+	case "all":
+		return storage.FlushAll(q.db)
+	default:
+		return fmt.Errorf("unknown flush type: %s", kind)
 	}
-
-	// allow retry only failed/dead jobs
-	if j.State != job.Failed  {
-		return nil, fmt.Errorf("job %d is not retryable (state=%s)", jobID, j.State)
-	}
-
-	// reset state & schedule immediately
-	j.State = job.Pending
-	j.ScheduledAt = time.Now().UTC()
-
-
-	if err := storage.UpdateJob(q.db, j); err != nil {
-		return nil, err
-	}
-
-	return j, nil
 }
-
-
-
-
-
