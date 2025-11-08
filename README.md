@@ -1,30 +1,28 @@
-````markdown
-# QueueCTL
+# QueueCTL 🚀
 
-QueueCTL is a CLI-based background job queue system built in Go. It supports persistent job storage, multiple workers, automatic retries with exponential backoff, and a dead-letter queue (DLQ) for failed jobs.
+**QueueCTL** is a CLI-based background job queue system written in Go. It supports persistent job storage, multiple workers, automatic retries with exponential backoff, and a dead-letter queue (DLQ) for failed jobs.
 
 ---
 
-## 📌 Features
+## 📌 Key Features
 
-- CLI application for managing jobs
+- CLI application for managing background jobs
 - Persistent SQLite storage for jobs and workers
 - Multiple concurrent worker support
-- Retry mechanism with configurable exponential backoff
-- Dead Letter Queue for jobs exceeding max retries
-- Configuration management via database
-- Minimal testing script for validating core flows
+- Automatic retries with configurable exponential backoff
+- Dead Letter Queue (DLQ) for jobs exceeding retry limits
+- Configurable runtime parameters via database
+- Minimal testing scripts for validating core flows
 
 ---
 
 ## 🛠 Setup Instructions
 
-1. **Clone the repository**:
-
+### 1. Clone the repository
 ```bash
 git clone <repo_url>
 cd QueueCTL
-````
+
 
 2. **Install dependencies**:
 
