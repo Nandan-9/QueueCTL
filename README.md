@@ -193,10 +193,37 @@ commands:
   jobs                               list jobs by state
   dlq                                list dead jobs
 ```
+## 🎥 Demo Video
+
+Watch a complete demo of QueueCTL in action:
+
+[![QueueCTL Demo Video](https://img.youtube.com/vi/VIDEO_ID/0.jpg)](https://drive.google.com/file/d/1ENT5mELasORm8-7eha9iQOarPzYVgPke/view?usp=sharing)
+
+*Click the image above to play the demo video.*
 
 ---
 
-This README ensures any developer or evaluator can quickly set up, run, and verify QueueCTL with clarity on architecture, design decisions, and testing methodology.
+##  Note from the Developer
+
+To the FLAM Team,  
+
+Thank you for giving me the opportunity to build an application like **QueueCTL**. It has been an incredible journey designing and implementing this CLI-based job queue system from scratch.  
+
+This project presented several challenges that pushed me out of my comfort zone:  
+- I primarily work with **Python and JavaScript**, but I chose **Go** for this project to fully leverage its concurrency model and strong type safety.  
+- Designing a **persistent, fault-tolerant job queue** with retry logic, dead-letter queue, and configurable backoff required careful planning of job lifecycle and worker management.  
+- Ensuring a clean **CLI interface** while supporting multiple workers, graceful shutdown, and real-time status tracking was a rewarding challenge.  
+
+While this may not be the final or “perfect” version, I’ve strived to deliver a **robust, functional, and maintainable solution** that demonstrates my ability to:  
+- Learn new technologies quickly and apply them effectively.  
+- Build complex backend systems with concurrency and persistence.  
+- Write clean, modular, and testable code.  
+
+I hope this project showcases my dedication, problem-solving skills, and ability to take initiative. I am excited about the opportunity to contribute to **FLAM** and continue building scalable, high-quality software.  
+
+Thank you for considering my submission.
+
+— **Devan**
 
 ```
 ```
